@@ -1,0 +1,9 @@
+sync_targets:
+  - repository: "microsoft/vscode-docs"
+    watch_folders:
+      - source_path: "docs/agents"
+        google_doc_id: "YOUR_GOOGLE_DOC_ID_HERE"
+        doc_name: "VSCode Agents Documentation"
+      - source_path: "docs/agent-customization"
+        google_doc_id: "YOUR_GOOGLE_DOC_ID_HERE"
+        doc_name: "VSCode Agent Customization Docs"
