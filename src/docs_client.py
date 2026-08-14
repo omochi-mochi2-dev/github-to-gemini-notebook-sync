@@ -5,7 +5,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from src.models import FileDiff
+from src.models import FileDiff, format_tab_title
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def generate_phase1_payload(diffs: List[FileDiff], current_tab_map: Dict[str, Di
                 
             # renamedの場合は古いタブの削除も同時に行う
             if diff.status == 'renamed' and diff.previous_filename:
-                old_tab_name = diff.previous_filename.replace('/', '_').replace('.', '_')
+                old_tab_name = format_tab_title(diff.previous_filename)
                 if old_tab_name in current_tab_map:
                     requests.append({
                         "deleteTab": {

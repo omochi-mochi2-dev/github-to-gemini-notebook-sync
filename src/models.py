@@ -1,5 +1,16 @@
 from dataclasses import dataclass
 from typing import Literal, Optional
+import hashlib
+
+def format_tab_title(filename: str, max_length: int = 50) -> str:
+    """フラットマッピング戦略に基づくタブ名の生成。
+    50文字を超える場合はSHA-256ハッシュを利用して50文字に収める。"""
+    base_name = filename.replace('/', '_').replace('.', '_')
+    if len(base_name) <= max_length:
+        return base_name
+    
+    file_hash = hashlib.sha256(filename.encode('utf-8')).hexdigest()
+    return f"{base_name[:41]}_{file_hash[:8]}"
 
 @dataclass
 class FileDiff:
@@ -12,5 +23,4 @@ class FileDiff:
     @property
     def target_tab_name(self) -> str:
         """フラットマッピング戦略に基づくタブ名の生成"""
-        # フォルダ構造の階層 (/) や拡張子をアンダースコアに置換しフラットな第一階層タブ名を作成
-        return self.filename.replace('/', '_').replace('.', '_')
+        return format_tab_title(self.filename)

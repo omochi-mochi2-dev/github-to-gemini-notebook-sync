@@ -40,6 +40,22 @@ class TestStep1(unittest.TestCase):
         )
         self.assertEqual(diff.target_tab_name, "docs_agents_my_file_md")
 
+    def test_format_tab_title_long(self):
+        # 50文字を超える長いファイルパスのテスト
+        long_filename1 = "docs/agent-customization/advanced-plugins/nested-directory/configuration-settings-guide.md"
+        long_filename2 = "docs/agent-customization/advanced-plugins/nested-directory/configuration-settings-other.md"
+        
+        diff1 = FileDiff(filename=long_filename1, previous_filename=None, status="added", raw_content_url=None, commit_sha="123")
+        diff2 = FileDiff(filename=long_filename2, previous_filename=None, status="added", raw_content_url=None, commit_sha="123")
+        
+        tab1 = diff1.target_tab_name
+        tab2 = diff2.target_tab_name
+        
+        self.assertLessEqual(len(tab1), 50)
+        self.assertEqual(len(tab1), 50)
+        self.assertEqual(len(tab2), 50)
+        self.assertNotEqual(tab1, tab2)
+
     @patch('os.environ.get')
     def test_load_config_success(self, mock_env):
         mock_env.return_value = 'fake_token'
