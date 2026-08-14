@@ -43,7 +43,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: credentials.json
         run: |
-          python src/main.py
+          python -m src.main
 
       - name: Alert on Failure
         if: failure()
