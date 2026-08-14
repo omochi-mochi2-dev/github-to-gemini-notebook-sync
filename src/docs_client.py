@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/documents']
 
-def init_docs_client(credentials_path: str = 'credentials.json'):
+def init_docs_client(credentials_path: str = 'credentials.json') -> Any:
     """
     credentials.json を使用して、Google Docs APIクライアントの認証初期化を行う。
     """
@@ -29,7 +29,7 @@ def init_docs_client(credentials_path: str = 'credentials.json'):
         logger.error(f"Failed to initialize Google Docs API client: {e}")
         raise
 
-def fetch_document_tabs(service, document_id: str) -> Dict[str, Any]:
+def fetch_document_tabs(service: Any, document_id: str) -> Dict[str, Any]:
     """
     documents.get を呼び出し、パラメータとして includeTabsContent=true を明示的に指定して
     既存のタブ一覧とコンテンツを含むドキュメント構造を取得する。
@@ -74,12 +74,14 @@ def extract_tabs_info(document_content: Dict[str, Any]) -> Dict[str, Dict[str, A
             
     return tab_info_map
 
-def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file_contents: Dict[str, str]) -> List[Dict[str, Any]]:
+def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file_contents: Dict[str, str]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     FileDiffのリストを受け取り、フラットマッピング戦略に従ってタブの追加、更新、削除を行うための
     documents.batchUpdate用ペイロードを生成する関数。
+    二段階同期アーキテクチャに対応するため、(create_requests, update_requests)のタプルを返す。
     """
-    requests = []
+    create_requests = []
+    update_requests = []
     tab_info_map = extract_tabs_info(doc_state)
 
     if diffs and all(diff.status == 'removed' for diff in diffs):
@@ -92,34 +94,28 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
         
         if diff.status == 'removed':
             if target_tab_name in tab_info_map:
-                tab_id = tab_info_map[target_tab_name]['tabId']
-                requests.append({
+                update_requests.append({
                     "deleteTab": {
-                        "tabId": tab_id
+                        "tabId": tab_info_map[target_tab_name]['tabId']
                     }
                 })
             else:
                 logger.warning(f"Tab {target_tab_name} not found for deletion. Skipping.")
                 
         elif diff.status in ['added', 'modified', 'renamed']:
-            # 新規タブ作成
             if target_tab_name not in tab_info_map:
-                requests.append({
+                # 存在しない場合は作成リクエストのみを積む（コンテンツ挿入は第二波で行う）
+                create_requests.append({
                     "createTab": {
                         "title": target_tab_name
                     }
                 })
-                # 新規作成タブへのコンテンツ挿入は、tabIdが直ちに確定しないため
-                # この実装では別途(または次回実行時に)行われる想定か、
-                # あるいは createTab はレスポンスなしに後続リクエストで参照できない制約がある。
-                # ここでは要件通り「追加」リクエストを生成。
-                
             else:
-                # 既存タブの更新: docs_tabs_logic.md に準拠したアトミック更新のシンプル化
+                # 存在する場合は既存コンテンツを削除して新規テキストを挿入
                 tab_id = tab_info_map[target_tab_name]['tabId']
                 
                 # ① 先に既存コンテンツを全削除（大きな endIndex で安全に全範囲を指定）
-                requests.append({
+                update_requests.append({
                     "deleteContentRange": {
                         "range": {
                             "startIndex": 1,
@@ -131,7 +127,7 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
                 
                 # ② インデックス 1 の位置から新規テキストを挿入
                 if content:
-                    requests.append({
+                    update_requests.append({
                         "insertText": {
                             "location": {
                                 "index": 1,
@@ -141,4 +137,4 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
                         }
                     })
                     
-    return requests
+    return create_requests, update_requests

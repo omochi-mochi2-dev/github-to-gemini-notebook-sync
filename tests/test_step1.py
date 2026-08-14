@@ -3,6 +3,10 @@ from unittest.mock import patch, mock_open, MagicMock
 import os
 import yaml
 import logging
+import sys
+
+# Ensure src can be imported
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.models import FileDiff
 from src.config import load_config
@@ -57,7 +61,7 @@ class TestStep1(unittest.TestCase):
     def test_get_previous_commit_sha(self):
         with patch('os.path.exists', return_value=True):
             with patch('builtins.open', mock_open(read_data="abc123sha")):
-                sha = get_previous_commit_sha('dummy.txt')
+                sha = get_previous_commit_sha('owner', 'repo')
                 self.assertEqual(sha, "abc123sha")
 
     @patch('src.github_client.requests.get')

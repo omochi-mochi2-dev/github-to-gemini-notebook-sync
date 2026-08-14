@@ -8,10 +8,11 @@ from src.models import FileDiff
 
 logger = logging.getLogger(__name__)
 
-def get_previous_commit_sha(file_path: str = 'last_commit_sha.txt') -> Optional[str]:
+def get_previous_commit_sha(owner: str, repo: str) -> Optional[str]:
     """
-    last_commit_sha.txt から前回実行時のコミットSHAを読み込む。
+    last_commit_sha_{owner}_{repo}.txt から前回実行時のコミットSHAを読み込む。
     """
+    file_path = f'last_commit_sha_{owner}_{repo}.txt'
     if not os.path.exists(file_path):
         logger.warning(f"{file_path} not found. This might be the first run.")
         return None
@@ -21,6 +22,59 @@ def get_previous_commit_sha(file_path: str = 'last_commit_sha.txt') -> Optional[
             logger.warning(f"{file_path} is empty.")
             return None
         return sha
+
+def get_latest_commit_sha(owner: str, repo: str, token: str, branch: str = 'main') -> str:
+    url = f"https://api.github.com/repos/{owner}/{repo}/commits/{branch}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    logger.info(f"Fetching latest commit SHA from {url}")
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json().get('sha')
+    except requests.exceptions.RequestException as e:
+        logger.error(f"GitHub API request failed: {e}")
+        if e.response is not None:
+            logger.error(f"Response body: {e.response.text}")
+        raise ValueError(f"Failed to fetch latest commit sha: {e}")
+
+def fetch_all_files_as_added(owner: str, repo: str, head_sha: str, token: str) -> List[FileDiff]:
+    url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{head_sha}?recursive=1"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    
+    logger.info(f"Performing full sync: fetching all files from tree {head_sha}")
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"GitHub API request failed: {e}")
+        if e.response is not None:
+            logger.error(f"Response body: {e.response.text}")
+        raise ValueError(f"Failed to fetch tree: {e}")
+        
+    tree = response.json().get('tree', [])
+    
+    diffs = []
+    for item in tree:
+        if item.get('type') == 'blob':
+            filename = item.get('path')
+            raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{head_sha}/{filename}"
+            diffs.append(FileDiff(
+                filename=filename,
+                previous_filename=None,
+                status='added',
+                raw_content_url=raw_url,
+                commit_sha=head_sha
+            ))
+            
+    return diffs
 
 def fetch_commit_diffs(base_sha: str, head_sha: str, owner: str, repo: str, token: str) -> List[FileDiff]:
     """
@@ -64,10 +118,6 @@ def fetch_commit_diffs(base_sha: str, head_sha: str, owner: str, repo: str, toke
     return diffs
 
 def analyze_folder_rename(diffs: List[FileDiff], repository: str, config_path: str = 'config.yaml') -> None:
-    """
-    差分の status == 'renamed' を走査し、監視対象フォルダが移動されたかを判定（80%ルール）。
-    移動を検知した場合は config.yaml の監視対象パスを書き換える自己修復ロジックを実行する。
-    """
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f) or {}
@@ -138,10 +188,6 @@ def analyze_folder_rename(diffs: List[FileDiff], repository: str, config_path: s
             raise
 
 def validate_failsafe(diffs: List[FileDiff], watch_folder: str) -> bool:
-    """
-    監視対象ファイルが「すべて removed（全消失）」になっていないかを検証し、
-    破壊的な変更が疑われる場合は例外を発生させる。
-    """
     watch_prefix = watch_folder if watch_folder.endswith('/') else f"{watch_folder}/"
     
     relevant_diffs = [
