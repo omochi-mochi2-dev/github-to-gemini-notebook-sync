@@ -2,11 +2,11 @@ name: GitHub ↔ Google Docs Sync
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force full synchronization ignoring SHA cache'
+        description: "Force full synchronization ignoring SHA cache"
         required: false
         default: false
         type: boolean
@@ -16,15 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Cache dependencies and State
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/pip
@@ -49,7 +49,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: credentials.json
         run: |
-          PYTHONPATH="." python src/main.py ${{ github.event.inputs.force == true && '--force' || '' }}
+          PYTHONPATH="." python src/main.py ${{ inputs.force && '--force' || '' }}
 
       - name: Alert on Failure
         if: failure()
