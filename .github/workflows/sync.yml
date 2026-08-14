@@ -2,11 +2,11 @@ name: GitHub ↔ Google Docs Sync
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force full synchronization ignoring SHA cache'
+        description: "Force full synchronization ignoring SHA cache"
         required: false
         default: false
         type: boolean
@@ -21,10 +21,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Cache dependencies and State
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/pip
