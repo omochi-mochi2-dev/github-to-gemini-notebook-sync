@@ -113,5 +113,27 @@ class TestStep3(unittest.TestCase):
         main()
         mock_fetch_all.assert_called_once_with('owner', 'repo', 'new_sha', 'fake')
 
+    @patch('src.main.fetch_all_files_as_added')
+    @patch('src.main.get_latest_commit_sha')
+    @patch('src.main.get_previous_commit_sha')
+    @patch('src.main.sys.exit')
+    @patch('src.main.init_docs_client')
+    @patch('src.main.load_config')
+    def test_main_force_sync(self, mock_load_config, mock_init, mock_exit, mock_prev_sha, mock_latest_sha, mock_fetch_all):
+        mock_load_config.return_value = {
+            'GITHUB_TOKEN': 'fake',
+            'sync_targets': [{'repository': 'owner/repo', 'watch_folders': []}]
+        }
+        mock_prev_sha.return_value = "same_sha"
+        mock_latest_sha.return_value = "same_sha"
+        mock_fetch_all.return_value = []
+        
+        with patch('builtins.open', unittest.mock.mock_open()) as mock_file:
+            main(force=True)
+            mock_file.assert_called_with('last_commit_sha_owner_repo.txt', 'w', encoding='utf-8')
+        
+        mock_fetch_all.assert_called_once_with('owner', 'repo', 'same_sha', 'fake')
+        mock_exit.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main()

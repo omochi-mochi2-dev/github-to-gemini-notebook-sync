@@ -2,6 +2,7 @@ import sys
 import logging
 import os
 import requests
+import argparse
 
 from src.config import load_config
 from src.github_client import (
@@ -24,7 +25,7 @@ from src.docs_client import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-def main() -> None:
+def main(force: bool = False) -> None:
     try:
         config = load_config()
         github_token = config['GITHUB_TOKEN']
@@ -48,11 +49,13 @@ def main() -> None:
             base_sha = get_previous_commit_sha(owner, repo)
             head_sha = get_latest_commit_sha(owner, repo, github_token)
             
-            if base_sha == head_sha:
+            if force:
+                logger.info(f"Force sync triggered. Ignoring base_sha and performing full sync for {repository}.")
+                diffs = fetch_all_files_as_added(owner, repo, head_sha, github_token)
+            elif base_sha == head_sha:
                 logger.info(f"No changes detected for {repository} (SHA: {head_sha}). Skipping.")
                 continue
-                
-            if not base_sha:
+            elif not base_sha:
                 logger.info(f"No previous commit SHA found. Performing full sync for {repository}. (Fallback)")
                 diffs = fetch_all_files_as_added(owner, repo, head_sha, github_token)
             else:
@@ -134,4 +137,7 @@ def main() -> None:
         sys.exit(1)
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description="GitHub to Google Docs Sync")
+    parser.add_argument('--force', action='store_true', help="Force full synchronization ignoring SHA cache")
+    args = parser.parse_args()
+    main(force=args.force)
