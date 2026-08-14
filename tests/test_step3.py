@@ -72,15 +72,11 @@ class TestStep3(unittest.TestCase):
         mock_init_docs_client.return_value = mock_docs_service
         
         with patch('builtins.open', unittest.mock.mock_open()) as mock_file:
-            # Need to mock generate_sync_payload to return our tuple since we mocked doc states
             with patch('src.main.generate_sync_payload') as mock_payload:
-                mock_payload.side_effect = [
-                    ([{'createTab': {}}], []), # first call
-                    ([], [{'insertText': {}}]) # second call
-                ]
+                mock_payload.return_value = [{'insertText': {}}]
                 main()
                 mock_exit.assert_not_called()
-                self.assertEqual(mock_docs_service.documents().batchUpdate.call_count, 2)
+                self.assertEqual(mock_docs_service.documents().batchUpdate.call_count, 1)
                 mock_file.assert_called_with('last_commit_sha_owner_repo.txt', 'w', encoding='utf-8')
 
     @patch('src.main.sys.exit')

@@ -66,24 +66,23 @@ class TestStep2(unittest.TestCase):
             "docs/agents/test1.md": "Hello World!"
         }
     
-        phase1_requests, phase2_requests = generate_sync_payload(diffs, self.mock_doc_state, file_contents)
+        requests = generate_sync_payload(diffs, self.mock_doc_state, file_contents)
     
-        self.assertEqual(len(phase1_requests), 0)
         # We expect 2 requests: deleteContentRange and insertText
-        self.assertEqual(len(phase2_requests), 2)
+        self.assertEqual(len(requests), 2)
     
         # First request should be deleteContentRange
-        self.assertIn("deleteContentRange", phase2_requests[0])
-        self.assertIn("insertText", phase2_requests[1])
-        self.assertEqual(phase2_requests[0]["deleteContentRange"]["range"]["startIndex"], 1)
-        self.assertEqual(phase2_requests[0]["deleteContentRange"]["range"]["endIndex"], 500000)
-        self.assertEqual(phase2_requests[0]["deleteContentRange"]["range"]["tabId"], "TAB123")
+        self.assertIn("deleteContentRange", requests[0])
+        self.assertIn("insertText", requests[1])
+        self.assertEqual(requests[0]["deleteContentRange"]["range"]["startIndex"], 1)
+        self.assertEqual(requests[0]["deleteContentRange"]["range"]["endIndex"], 500000)
+        self.assertEqual(requests[0]["deleteContentRange"]["range"]["tabId"], "TAB123")
 
         # Second request should be insertText at index 1
-        self.assertIn("insertText", phase2_requests[1])
-        self.assertEqual(phase2_requests[1]["insertText"]["location"]["index"], 1)
-        self.assertEqual(phase2_requests[1]["insertText"]["location"]["tabId"], "TAB123")
-        self.assertEqual(phase2_requests[1]["insertText"]["text"], "Hello World!")
+        self.assertIn("insertText", requests[1])
+        self.assertEqual(requests[1]["insertText"]["location"]["index"], 1)
+        self.assertEqual(requests[1]["insertText"]["location"]["tabId"], "TAB123")
+        self.assertEqual(requests[1]["insertText"]["text"], "Hello World!")
 
     def test_generate_sync_payload_add_new_tab(self):
         diffs = [
@@ -99,12 +98,10 @@ class TestStep2(unittest.TestCase):
             "docs/agents/new_file.md": "New content"
         }
     
-        phase1_requests, phase2_requests = generate_sync_payload(diffs, self.mock_doc_state, file_contents)
+        requests = generate_sync_payload(diffs, self.mock_doc_state, file_contents)
     
-        self.assertEqual(len(phase1_requests), 1)
-        self.assertIn("createTab", phase1_requests[0])
-        self.assertEqual(len(phase2_requests), 0)
-        self.assertEqual(phase1_requests[0]["createTab"]["title"], "docs_agents_new_file_md")
+        # Missing tab is skipped, so no requests
+        self.assertEqual(len(requests), 0)
 
     def test_generate_sync_payload_remove_tab(self):
         diffs = [
@@ -124,14 +121,11 @@ class TestStep2(unittest.TestCase):
             )
         ]
     
-        phase1_requests, phase2_requests = generate_sync_payload(diffs, self.mock_doc_state, {})
+        requests = generate_sync_payload(diffs, self.mock_doc_state, {})
     
-        self.assertEqual(len(phase1_requests), 1)
-        self.assertIn("deleteTab", phase1_requests[0])
-        self.assertEqual(phase1_requests[0]["deleteTab"]["tabId"], "TAB999")
-        
-        self.assertEqual(len(phase2_requests), 1)
-        self.assertIn("deleteContentRange", phase2_requests[0])
+        # deletion is skipped, update is processed (no content = 1 request for deleteContentRange)
+        self.assertEqual(len(requests), 1)
+        self.assertIn("deleteContentRange", requests[0])
 
     def test_failsafe_triggered(self):
         diffs = [
