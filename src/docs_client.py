@@ -74,56 +74,107 @@ def extract_tabs_info(document_content: Dict[str, Any]) -> Dict[str, Dict[str, A
             
     return tab_info_map
 
-def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file_contents: Dict[str, str]) -> List[Dict[str, Any]]:
+def generate_phase1_payload(diffs: List[FileDiff], current_tab_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    FileDiffのリストを受け取り、既存のタブの中身を更新するための
-    documents.batchUpdate用ペイロードを生成する関数。
-    API経由でのタブの作成・削除は未サポートのため、存在しないタブや削除リクエストはWarningを出力してスキップする。
+    Phase 1: タブの作成と削除を行うリクエストを生成する。
     """
     requests = []
-    tab_info_map = extract_tabs_info(doc_state)
-
+    
     if diffs and all(diff.status == 'removed' for diff in diffs):
         logger.error("Fail-safe triggered: All detected diffs are 'removed'. Aborting sync to prevent total document deletion.")
         raise RuntimeError("Fail-safe: 監視対象パス内の全ファイルが削除対象になっています。不正な全削除を防ぐため処理を中断します。")
 
     for diff in diffs:
         target_tab_name = diff.target_tab_name
-        content = file_contents.get(diff.filename, "")
         
         if diff.status == 'removed':
-            logger.warning(f"Skipping deletion for '{target_tab_name}': API does not support deleting tabs. Please delete it manually.")
-            continue
-                
-        elif diff.status in ['added', 'modified', 'renamed']:
-            if target_tab_name not in tab_info_map:
-                logger.warning(f"Skipping update for '{target_tab_name}': Tab does not exist. Please create it manually.")
-                continue
-            else:
-                # 存在する場合は既存コンテンツを削除して新規テキストを挿入
-                tab_id = tab_info_map[target_tab_name]['tabId']
-                
-                # ① 先に既存コンテンツを全削除（大きな endIndex で安全に全範囲を指定）
+            if target_tab_name in current_tab_map:
+                tab_id = current_tab_map[target_tab_name]['tabId']
                 requests.append({
-                    "deleteContentRange": {
-                        "range": {
-                            "startIndex": 1,
-                            "endIndex": 500000,
-                            "tabId": tab_id
+                    "deleteTab": {
+                        "tabId": tab_id
+                    }
+                })
+            else:
+                logger.warning(f"Skipping deletion for '{target_tab_name}': Tab does not exist.")
+        elif diff.status in ['added', 'modified', 'renamed']:
+            # 追加、または既存タブマップに存在しない場合は新規作成 (addDocumentTab)
+            if target_tab_name not in current_tab_map:
+                requests.append({
+                    "addDocumentTab": {
+                        "tabProperties": {
+                            "title": target_tab_name
                         }
                     }
                 })
                 
-                # ② インデックス 1 の位置から新規テキストを挿入
-                if content:
+            # renamedの場合は古いタブの削除も同時に行う
+            if diff.status == 'renamed' and diff.previous_filename:
+                old_tab_name = diff.previous_filename.replace('/', '_').replace('.', '_')
+                if old_tab_name in current_tab_map:
                     requests.append({
-                        "insertText": {
-                            "location": {
-                                "index": 1,
-                                "tabId": tab_id
-                            },
-                            "text": content
+                        "deleteTab": {
+                            "tabId": current_tab_map[old_tab_name]['tabId']
                         }
                     })
                     
     return requests
+
+def generate_phase2_payload(diffs: List[FileDiff], latest_tab_map: Dict[str, Dict[str, Any]], file_contents: Dict[str, str]) -> List[Dict[str, Any]]:
+    """
+    Phase 2: 最新のtabIdを用いて、コンテンツの全置換(deleteContentRange + insertText)を行うリクエストを生成する。
+    """
+    requests = []
+    
+    for diff in diffs:
+        if diff.status in ['added', 'modified', 'renamed']:
+            target_tab_name = diff.target_tab_name
+            content = file_contents.get(diff.filename, "")
+            
+            if target_tab_name not in latest_tab_map:
+                logger.error(f"Tab '{target_tab_name}' not found in Phase 2 despite Phase 1 execution. Skipping content update.")
+                continue
+                
+            tab_id = latest_tab_map[target_tab_name]['tabId']
+            
+            # ① 先に既存コンテンツを全削除（大きな endIndex で安全に全範囲を指定）
+            requests.append({
+                "deleteContentRange": {
+                    "range": {
+                        "startIndex": 1,
+                        "endIndex": 500000,
+                        "tabId": tab_id
+                    }
+                }
+            })
+            
+            # ② インデックス 1 の位置から新規テキストを挿入
+            if content:
+                requests.append({
+                    "insertText": {
+                        "location": {
+                            "index": 1,
+                            "tabId": tab_id
+                        },
+                        "text": content
+                    }
+                })
+                
+    return requests
+
+def apply_batch_update(service: Any, document_id: str, requests: List[Dict[str, Any]]) -> None:
+    """
+    リクエストが存在する場合に batchUpdate を実行する。
+    """
+    if not requests:
+        return
+        
+    try:
+        service.documents().batchUpdate(
+            documentId=document_id,
+            body={'requests': requests}
+        ).execute()
+        logger.info(f"Successfully applied batch update with {len(requests)} requests for document {document_id}.")
+    except HttpError as e:
+        logger.error(f"Google Docs API HTTP Error during batchUpdate on document {document_id}: {e}")
+        raise
