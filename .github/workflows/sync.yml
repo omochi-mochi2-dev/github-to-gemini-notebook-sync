@@ -49,7 +49,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: credentials.json
         run: |
-          PYTHONPATH="." python src/main.py ${{ github.event.inputs.force == true && '--force' || '' }}
+          PYTHONPATH="." python src/main.py ${{ inputs.force && '--force' || '' }}
 
       - name: Alert on Failure
         if: failure()
