@@ -15,7 +15,10 @@ from src.github_client import (
 from src.docs_client import (
     init_docs_client,
     fetch_document_tabs,
-    generate_sync_payload
+    extract_tabs_info,
+    generate_phase1_payload,
+    generate_phase2_payload,
+    apply_batch_update
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -94,15 +97,31 @@ def main() -> None:
                             logger.error(f"Failed to fetch raw content for {d.filename}: {e}")
                             raise
 
-                # 7. Google Docs同期
-                doc_state = fetch_document_tabs(docs_service, doc_id)
-                sync_reqs = generate_sync_payload(folder_diffs, doc_state, file_contents)
+                # 7. Google Docs同期 (2段階プロセス)
+                # Phase 1: 構造の同期（タブの作成・削除）
+                current_doc_state = fetch_document_tabs(docs_service, doc_id)
+                current_tab_map = extract_tabs_info(current_doc_state)
                 
-                if sync_reqs:
-                    logger.info(f"Executing batch update for {doc_id} with {len(sync_reqs)} requests.")
-                    docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': sync_reqs}).execute()
+                phase1_reqs = generate_phase1_payload(folder_diffs, current_tab_map)
+                if phase1_reqs:
+                    logger.info(f"Phase 1: Executing structural changes (tabs creation/deletion) for {doc_id}.")
+                    apply_batch_update(docs_service, doc_id, phase1_reqs)
+                    
+                    # 構造が変更されたため、再フェッチして新しいtabIdを取得する
+                    logger.info(f"Re-fetching document tabs to get updated tabIds.")
+                    latest_doc_state = fetch_document_tabs(docs_service, doc_id)
+                    latest_tab_map = extract_tabs_info(latest_doc_state)
                 else:
-                    logger.info(f"No text updates required for {source_path}.")
+                    logger.info(f"Phase 1: No structural changes required for {source_path}.")
+                    latest_tab_map = current_tab_map
+                
+                # Phase 2: コンテンツの同期（削除と挿入のアトミック処理）
+                phase2_reqs = generate_phase2_payload(folder_diffs, latest_tab_map, file_contents)
+                if phase2_reqs:
+                    logger.info(f"Phase 2: Executing content updates for {doc_id}.")
+                    apply_batch_update(docs_service, doc_id, phase2_reqs)
+                else:
+                    logger.info(f"Phase 2: No content updates required for {source_path}.")
                     
             # 8. 状態の保存 (リポジトリ単位のファイル名へ変更)
             sha_filename = f'last_commit_sha_{owner}_{repo}.txt'

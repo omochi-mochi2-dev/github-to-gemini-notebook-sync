@@ -72,11 +72,20 @@ class TestStep3(unittest.TestCase):
         mock_init_docs_client.return_value = mock_docs_service
         
         with patch('builtins.open', unittest.mock.mock_open()) as mock_file:
-            with patch('src.main.generate_sync_payload') as mock_payload:
-                mock_payload.return_value = [{'insertText': {}}]
+            with patch('src.main.generate_phase1_payload') as mock_p1, \
+                 patch('src.main.generate_phase2_payload') as mock_p2, \
+                 patch('src.main.apply_batch_update') as mock_apply, \
+                 patch('src.main.extract_tabs_info') as mock_extract:
+                
+                mock_p1.return_value = [{'addDocumentTab': {}}]
+                mock_p2.return_value = [{'insertText': {}}]
+                mock_extract.return_value = {}
+                
                 main()
+                
                 mock_exit.assert_not_called()
-                self.assertEqual(mock_docs_service.documents().batchUpdate.call_count, 1)
+                self.assertEqual(mock_apply.call_count, 2)
+                self.assertEqual(mock_fetch_tabs.call_count, 2)
                 mock_file.assert_called_with('last_commit_sha_owner_repo.txt', 'w', encoding='utf-8')
 
     @patch('src.main.sys.exit')
