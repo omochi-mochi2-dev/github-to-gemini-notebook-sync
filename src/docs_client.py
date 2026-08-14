@@ -78,10 +78,10 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
     """
     FileDiffのリストを受け取り、フラットマッピング戦略に従ってタブの追加、更新、削除を行うための
     documents.batchUpdate用ペイロードを生成する関数。
-    二段階同期アーキテクチャに対応するため、(create_requests, update_requests)のタプルを返す。
+    二段階同期アーキテクチャに対応するため、(phase1_requests, phase2_requests)のタプルを返す。
     """
-    create_requests = []
-    update_requests = []
+    phase1_requests = []
+    phase2_requests = []
     tab_info_map = extract_tabs_info(doc_state)
 
     if diffs and all(diff.status == 'removed' for diff in diffs):
@@ -94,18 +94,16 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
         
         if diff.status == 'removed':
             if target_tab_name in tab_info_map:
-                update_requests.append({
+                phase1_requests.append({
                     "deleteTab": {
                         "tabId": tab_info_map[target_tab_name]['tabId']
                     }
                 })
-            else:
-                logger.warning(f"Tab {target_tab_name} not found for deletion. Skipping.")
                 
         elif diff.status in ['added', 'modified', 'renamed']:
             if target_tab_name not in tab_info_map:
                 # 存在しない場合は作成リクエストのみを積む（コンテンツ挿入は第二波で行う）
-                create_requests.append({
+                phase1_requests.append({
                     "createTab": {
                         "title": target_tab_name
                     }
@@ -115,7 +113,7 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
                 tab_id = tab_info_map[target_tab_name]['tabId']
                 
                 # ① 先に既存コンテンツを全削除（大きな endIndex で安全に全範囲を指定）
-                update_requests.append({
+                phase2_requests.append({
                     "deleteContentRange": {
                         "range": {
                             "startIndex": 1,
@@ -127,7 +125,7 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
                 
                 # ② インデックス 1 の位置から新規テキストを挿入
                 if content:
-                    update_requests.append({
+                    phase2_requests.append({
                         "insertText": {
                             "location": {
                                 "index": 1,
@@ -137,4 +135,4 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
                         }
                     })
                     
-    return create_requests, update_requests
+    return phase1_requests, phase2_requests

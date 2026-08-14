@@ -96,21 +96,22 @@ def main() -> None:
 
                 # 7. Google Docs同期（二段階同期アーキテクチャ）
                 doc_state = fetch_document_tabs(docs_service, doc_id)
-                create_reqs, update_reqs = generate_sync_payload(folder_diffs, doc_state, file_contents)
+                phase1_reqs, phase2_reqs = generate_sync_payload(folder_diffs, doc_state, file_contents)
                 
-                # ① まず新規タブの作成を実行
-                if create_reqs:
-                    logger.info(f"Creating new tabs for {doc_id}.")
-                    docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': create_reqs}).execute()
-                    # 作成後、新しい tabId を取得するためにドキュメント状態を再フェッチ
+                # ① まず新規タブの作成・削除（構造変更）を実行
+                if phase1_reqs:
+                    logger.info(f"Executing Phase 1 (Create/Delete tabs) for {doc_id}.")
+                    docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': phase1_reqs}).execute()
+                    
+                    # 作成・削除後、新しい tabId とインデックス構造を取得するために再フェッチ
                     doc_state = fetch_document_tabs(docs_service, doc_id)
                     # 第二波の更新リクエストを再生成
-                    _, update_reqs = generate_sync_payload(folder_diffs, doc_state, file_contents)
+                    _, phase2_reqs = generate_sync_payload(folder_diffs, doc_state, file_contents)
                 
                 # ② テキストの挿入と更新を実行
-                if update_reqs:
-                    logger.info(f"Executing batch update for {doc_id} with {len(update_reqs)} requests.")
-                    docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': update_reqs}).execute()
+                if phase2_reqs:
+                    logger.info(f"Executing Phase 2 batch update for {doc_id} with {len(phase2_reqs)} requests.")
+                    docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': phase2_reqs}).execute()
                 else:
                     logger.info(f"No text updates required for {source_path}.")
                     
