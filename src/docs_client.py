@@ -74,14 +74,13 @@ def extract_tabs_info(document_content: Dict[str, Any]) -> Dict[str, Dict[str, A
             
     return tab_info_map
 
-def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file_contents: Dict[str, str]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file_contents: Dict[str, str]) -> List[Dict[str, Any]]:
     """
-    FileDiffのリストを受け取り、フラットマッピング戦略に従ってタブの追加、更新、削除を行うための
+    FileDiffのリストを受け取り、既存のタブの中身を更新するための
     documents.batchUpdate用ペイロードを生成する関数。
-    二段階同期アーキテクチャに対応するため、(phase1_requests, phase2_requests)のタプルを返す。
+    API経由でのタブの作成・削除は未サポートのため、存在しないタブや削除リクエストはWarningを出力してスキップする。
     """
-    phase1_requests = []
-    phase2_requests = []
+    requests = []
     tab_info_map = extract_tabs_info(doc_state)
 
     if diffs and all(diff.status == 'removed' for diff in diffs):
@@ -93,27 +92,19 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
         content = file_contents.get(diff.filename, "")
         
         if diff.status == 'removed':
-            if target_tab_name in tab_info_map:
-                phase1_requests.append({
-                    "deleteTab": {
-                        "tabId": tab_info_map[target_tab_name]['tabId']
-                    }
-                })
+            logger.warning(f"Skipping deletion for '{target_tab_name}': API does not support deleting tabs. Please delete it manually.")
+            continue
                 
         elif diff.status in ['added', 'modified', 'renamed']:
             if target_tab_name not in tab_info_map:
-                # 存在しない場合は作成リクエストのみを積む（コンテンツ挿入は第二波で行う）
-                phase1_requests.append({
-                    "createTab": {
-                        "title": target_tab_name
-                    }
-                })
+                logger.warning(f"Skipping update for '{target_tab_name}': Tab does not exist. Please create it manually.")
+                continue
             else:
                 # 存在する場合は既存コンテンツを削除して新規テキストを挿入
                 tab_id = tab_info_map[target_tab_name]['tabId']
                 
                 # ① 先に既存コンテンツを全削除（大きな endIndex で安全に全範囲を指定）
-                phase2_requests.append({
+                requests.append({
                     "deleteContentRange": {
                         "range": {
                             "startIndex": 1,
@@ -125,7 +116,7 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
                 
                 # ② インデックス 1 の位置から新規テキストを挿入
                 if content:
-                    phase2_requests.append({
+                    requests.append({
                         "insertText": {
                             "location": {
                                 "index": 1,
@@ -135,4 +126,4 @@ def generate_sync_payload(diffs: List[FileDiff], doc_state: Dict[str, Any], file
                         }
                     })
                     
-    return phase1_requests, phase2_requests
+    return requests
