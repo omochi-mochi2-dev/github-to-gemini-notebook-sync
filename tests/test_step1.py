@@ -25,7 +25,7 @@ sync_targets:
     watch_folders:
       - source_path: "docs/agents"
         google_doc_id: "DOC_ID_1"
-        doc_name: "VSCode Agents Documentation"
+        doc_name: "[VS Code Docs] Agents & Copilot"
 """
 
 class TestStep1(unittest.TestCase):

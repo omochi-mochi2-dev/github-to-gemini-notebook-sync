@@ -3,7 +3,7 @@ sync_targets:
     watch_folders:
       - source_path: "docs/agents"
         google_doc_id: "13_8U-Tt_aV4LJynItVm2bUtab3HLwIi2TMCSqldQ1rk"
-        doc_name: "VSCode Agents Documentation"
+        doc_name: "[VS Code Docs] Agents & Copilot"
       - source_path: "docs/agent-customization"
         google_doc_id: "13_8U-Tt_aV4LJynItVm2bUtab3HLwIi2TMCSqldQ1rk"
-        doc_name: "VSCode Agent Customization Docs"
+        doc_name: "[VS Code Docs] Agents & Copilot"
