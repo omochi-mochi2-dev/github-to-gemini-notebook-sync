@@ -124,6 +124,27 @@ class TestStep2(unittest.TestCase):
             
         self.assertIn("Fail-safe", str(context.exception))
 
+    def test_tab_limit_exceeded_raises_runtime_error(self):
+        # Create a mock_tab_info with 100 tabs
+        large_mock_tab_info = {
+            f"tab_{i}": {"tabId": f"TAB{i}", "endIndex": 10} for i in range(100)
+        }
+        
+        diffs = [
+            FileDiff(
+                filename="docs/agents/new_file.md",
+                previous_filename=None,
+                status="added",
+                raw_content_url="url",
+                commit_sha="sha"
+            )
+        ]
+        
+        with self.assertRaises(RuntimeError) as context:
+            generate_phase1_payload(diffs, large_mock_tab_info)
+            
+        self.assertIn("1ドキュメントのタブ数上限(100)を超過するため", str(context.exception))
+
     def test_generate_phase1_payload_renamed(self):
         diffs = [
             FileDiff(

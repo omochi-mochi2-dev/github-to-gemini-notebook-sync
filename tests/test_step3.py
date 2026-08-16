@@ -91,10 +91,12 @@ class TestStep3(unittest.TestCase):
     @patch('src.main.sys.exit')
     @patch('src.main.init_docs_client')
     @patch('src.main.load_config')
-    def test_main_exception_triggers_exit(self, mock_load_config, mock_init_docs_client, mock_exit):
+    def test_main_exception_triggers_exit_and_protects_sha(self, mock_load_config, mock_init_docs_client, mock_exit):
         mock_load_config.side_effect = Exception("Config load error")
-        main()
-        mock_exit.assert_called_once_with(1)
+        with patch('builtins.open', unittest.mock.mock_open()) as mock_file:
+            main()
+            mock_exit.assert_called_once_with(1)
+            mock_file.assert_not_called()
 
     @patch('src.main.fetch_all_files_as_added')
     @patch('src.main.get_latest_commit_sha')

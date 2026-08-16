@@ -65,6 +65,9 @@ def fetch_all_files_as_added(owner: str, repo: str, head_sha: str, token: str) -
     for item in tree:
         if item.get('type') == 'blob':
             filename = item.get('path')
+            if not (filename.endswith('.md') or filename.endswith('.txt')):
+                continue
+                
             raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{head_sha}/{filename}"
             diffs.append(FileDiff(
                 filename=filename,
@@ -102,13 +105,17 @@ def fetch_commit_diffs(base_sha: str, head_sha: str, owner: str, repo: str, toke
     
     diffs = []
     for f in files:
+        filename = f.get('filename', '')
+        if not (filename.endswith('.md') or filename.endswith('.txt')):
+            continue
+            
         status = f.get('status')
         if status not in ['added', 'modified', 'removed', 'renamed']:
-            logger.warning(f"Unexpected status '{status}' for file {f.get('filename')}. Treating as modified.")
+            logger.warning(f"Unexpected status '{status}' for file {filename}. Treating as modified.")
             status = 'modified'
             
         diffs.append(FileDiff(
-            filename=f.get('filename', ''),
+            filename=filename,
             previous_filename=f.get('previous_filename'),
             status=status,
             raw_content_url=f.get('raw_url'),
