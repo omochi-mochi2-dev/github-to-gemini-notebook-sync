@@ -154,17 +154,20 @@ def generate_phase2_payload(diffs: List[FileDiff], latest_tab_map: Dict[str, Dic
                 continue
                 
             tab_id = latest_tab_map[target_tab_name]['tabId']
+            end_index = latest_tab_map[target_tab_name].get('endIndex', 2)
+            delete_end_index = end_index - 1
             
-            # ① 先に既存コンテンツを全削除（大きな endIndex で安全に全範囲を指定）
-            requests.append({
-                "deleteContentRange": {
-                    "range": {
-                        "startIndex": 1,
-                        "endIndex": 500000,
-                        "tabId": tab_id
+            # ① 先に既存コンテンツを全削除（空タブの場合はスキップ）
+            if delete_end_index > 1:
+                requests.append({
+                    "deleteContentRange": {
+                        "range": {
+                            "startIndex": 1,
+                            "endIndex": delete_end_index,
+                            "tabId": tab_id
+                        }
                     }
-                }
-            })
+                })
             
             # ② インデックス 1 の位置から新規テキストを挿入
             if content:
