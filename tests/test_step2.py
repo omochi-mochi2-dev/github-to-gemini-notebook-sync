@@ -101,12 +101,42 @@ class TestStep2(unittest.TestCase):
         self.assertIn("deleteContentRange", requests[0])
         self.assertEqual(requests[0]["deleteContentRange"]["range"]["tabId"], "TAB123")
         self.assertEqual(requests[0]["deleteContentRange"]["range"]["startIndex"], 1)
-        self.assertEqual(requests[0]["deleteContentRange"]["range"]["endIndex"], 500000)
+        self.assertEqual(requests[0]["deleteContentRange"]["range"]["endIndex"], 49)
         
         self.assertIn("insertText", requests[1])
         self.assertEqual(requests[1]["insertText"]["location"]["tabId"], "TAB123")
         self.assertEqual(requests[1]["insertText"]["location"]["index"], 1)
         self.assertEqual(requests[1]["insertText"]["text"], "Hello World!")
+
+    def test_generate_phase2_payload_empty_tab(self):
+        # Create a mock tab with endIndex = 2 (empty tab)
+        empty_tab_info = {
+            "docs_agents_empty_md": {
+                "tabId": "TAB_EMPTY",
+                "endIndex": 2
+            }
+        }
+        diffs = [
+            FileDiff(
+                filename="docs/agents/empty.md",
+                previous_filename=None,
+                status="added",
+                raw_content_url="url",
+                commit_sha="sha"
+            )
+        ]
+        file_contents = {
+            "docs/agents/empty.md": "New content"
+        }
+        
+        requests = generate_phase2_payload(diffs, empty_tab_info, file_contents)
+        
+        # Expected: only insertText, deleteContentRange is skipped
+        self.assertEqual(len(requests), 1)
+        self.assertIn("insertText", requests[0])
+        self.assertEqual(requests[0]["insertText"]["location"]["tabId"], "TAB_EMPTY")
+        self.assertEqual(requests[0]["insertText"]["location"]["index"], 1)
+        self.assertEqual(requests[0]["insertText"]["text"], "New content")
 
     def test_failsafe_triggered(self):
         diffs = [
