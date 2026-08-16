@@ -94,6 +94,11 @@ class TestStep1(unittest.TestCase):
                     "filename": "docs/file2.md",
                     "status": "unknown_status", # Should be mapped to modified
                     "raw_url": "url2"
+                },
+                {
+                    "filename": "docs/image.png",
+                    "status": "added",
+                    "raw_url": "url3"
                 }
             ]
         }
@@ -102,7 +107,9 @@ class TestStep1(unittest.TestCase):
         diffs = fetch_commit_diffs("base", "head", "owner", "repo", "token")
         self.assertEqual(len(diffs), 2)
         self.assertEqual(diffs[0].status, "added")
+        self.assertEqual(diffs[0].filename, "docs/file1.md")
         self.assertEqual(diffs[1].status, "modified")
+        self.assertEqual(diffs[1].filename, "docs/file2.md")
 
     def test_analyze_folder_rename_success(self):
         diffs = [

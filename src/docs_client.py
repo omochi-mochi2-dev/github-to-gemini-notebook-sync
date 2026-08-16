@@ -84,6 +84,24 @@ def generate_phase1_payload(diffs: List[FileDiff], current_tab_map: Dict[str, Di
         logger.error("Fail-safe triggered: All detected diffs are 'removed'. Aborting sync to prevent total document deletion.")
         raise RuntimeError("Fail-safe: 監視対象パス内の全ファイルが削除対象になっています。不正な全削除を防ぐため処理を中断します。")
 
+    # 事前に最終的なタブ数をシミュレーションして上限チェック
+    expected_tab_names = set(current_tab_map.keys())
+    for diff in diffs:
+        target_tab_name = diff.target_tab_name
+        if diff.status == 'removed':
+            expected_tab_names.discard(target_tab_name)
+        elif diff.status in ['added', 'modified']:
+            expected_tab_names.add(target_tab_name)
+        elif diff.status == 'renamed':
+            if diff.previous_filename:
+                old_tab_name = format_tab_title(diff.previous_filename)
+                expected_tab_names.discard(old_tab_name)
+            expected_tab_names.add(target_tab_name)
+
+    if len(expected_tab_names) > 100:
+        logger.error(f"Fail-safe triggered: Estimated tab count ({len(expected_tab_names)}) exceeds the Google Docs limit of 100.")
+        raise RuntimeError(f"1ドキュメントのタブ数上限(100)を超過するため処理を中断します（予測タブ数: {len(expected_tab_names)}）。対象ファイルを減らすか設定を分割してください。")
+
     for diff in diffs:
         target_tab_name = diff.target_tab_name
         
